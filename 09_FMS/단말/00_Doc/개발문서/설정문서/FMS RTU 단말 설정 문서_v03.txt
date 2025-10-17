@@ -1,0 +1,380 @@
+
+########################
+# Board Jumper & BIOS settings
+########################
+
+1. 보드 점퍼 세팅 ATX 방식으로 설정
+   ==> AT : 전원이 인가되면 바로 켜진다.
+   ==> ATX : 버튼 On/Off 방식
+
+2. COM3( 전원감시장치용 RS485) 
+   시모스에서 485 AUTO CONTORL ENABLE로 설정
+    ==> Advance > NCT60106D Configuration  > RS485 Auto Enable
+
+
+2. BIOS 설정
+
+	2-1. mSATA 방식 HDD를 인식
+		==> Chipset > South Bridge > SATA port2/mSATA : [mSATA]
+	2-2. 리눅스 계열에서 시스템 종료 및 시스템 재시작 명령 시, 화면이 멈춰버린다.
+		==> Advanced > MISC > OS : [windows 8.x]	
+	2-3. 전원 인가 시, 바로 켜지도록 한다.
+		==> Chipset > South Bridge > Restore AC Power Loss : [Power On]
+
+########################
+# Linux 설치 및 설정
+########################
+
+0. Linux OS 설치
+	0-1. Ubuntu Server 14.04.5 LTS (GNU/Linux 4.2.0-27-generic x86_64) (Non-UI)
+	
+	0-2. SSH 설치
+		> apt-get install openssh-server
+		> vi /etc/ssh/sshd_config
+
+        0-3. NFS 클라이언트 설치 
+                > sudo apt-get install nfs-common
+           
+1.	OS Update
+
+	$ sudo apt-get update
+	$ sudo apt-get upgrade
+
+
+2.	사용자 계정 
+
+	Linux Host를 Service용이 아닌 Development용으로 사용하기 때문에 편의상 root group에 속하도록 변경한다.
+	a. User group
+	b. sudo 권한 변경
+	c. Desktop Shell 변경
+	d. root 계정 활성화
+
+	2-1. [ User Group 변경 ] - optional
+
+		fms : 설정 변경의 예제로 사용하는 User ID.
+		 
+		- 변경 전에 확인
+		$ id
+		uid=1000(flowsoul) gid=1000(fms) groups=4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),109(lpadmin),124(sambashare),1000(flowsoul)
+		 
+		- 변경
+		$ sudo usermod -a -G 0 fms // root 추가
+		$ sudo usermod -g 0 fms // 기본 그룹으로 root로 변경
+		 
+		- 확인
+		$ id
+		uid=1000(fms) gid=0(root) groups=0(root),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),109(lpadmin),124(sambashare)
+	 
+	2-2. [ sudo 권한 변경 ] - optional, Rebooting이 필요하다.
+
+		$ sudo gedit /etc/sudoers 
+		또는 
+		$ sudo vi /etc/sudoers 
+		 
+		추가 내용 :
+		fms ALL=(ALL:ALL) ALL 
+		…
+		#includedir /etc/sudoer.d
+	 
+	2-3. [ sudo : Password 없이 사용하기 ]
+
+		$ sudo gedit /etc/sudoers.d/mysudoers
+		 
+		fms ALL=(ALL) NOPASSWD:ALL
+		 
+		추가 후 저장
+		 
+		$ sudo chmod 0440 /etc/sudoers.d/mysudoers
+
+
+	2-4 Serial 권한 설정
+		sudo usermod -a -G dialout fms
+
+
+	2-5 [ root 계정 활성화 ] - 개발용이기 때문에 root 계정을 활성화하는 것이 편하다.
+		$ sudo passwd root
+		  ->fms123
+
+	2-6 ssh root계정으로 접속 가능하게
+		
+		/etc/sshd/sshd_config 파일의 PermitRootLogin yes로 변경한다.
+
+	2-7 arping 설치 ( 네트워크 체크 로직시 필요 )
+		
+		sudo apt-get install arping
+
+	2-8 crontab 설정 ( 7일 이상 되는 로그 파일 삭제 )
+		vi /etc/crontab
+
+		00 1    * * *   root    find /home/fms/log -type f -atime +7 -exec rm {} \;  <-추가 
+
+        2-9 fms 루크 권한 설정 ( 부팅 시 fms root 권한 부여 )
+
+		sudo vi /etc/passwd
+
+		fms:x:0:0:fms,,,:/home/fms:/bin/bash    <- 1000에서 0으로 변경 
+
+
+       2-10 TCP keeap alive 설정
+		echo 60 > /proc/sys/net/ipv4/tcp_keepalive_time
+		echo 30 > /proc/sys/net/ipv4/tcp_keepalive_intvl
+		echo 10 > /proc/sys/net/ipv4/tcp_keepalive_probes
+
+      2-11 observer_run.sh 배치 파일 추가 ( rtu Auto run 처리 )
+		vi /etc/crontab
+
+		*  *    * * *   fms     /home/fms/observer_run.sh  <- 추가 		
+
+
+		observer_ruh.sh 소스
+		============================================================
+		#!/bin/bash
+
+		SERVICE='fms_observer'
+
+		if ps ax | grep -v grep | grep $SERVICE > /dev/null
+		then
+		    echo "$SERVICE service running, everything is fine"
+		else
+		    echo "$SERVICE is not running"
+		        cd /home/fms/appm
+		        /home/fms/appm/fms_observer &
+		fi
+		==============================================================
+	재부팅
+
+    2-12 < 마리아 디비 옵션 및 Event 추가 변경 >
+
+	/etc/mysql/my.conf
+
+	-> Application 한글 입력 시 필요 
+	skip-character-set-client-handshake
+
+	-> event 사용 
+	event_scheduler = ON
+
+	--> 옵션 제거 
+	default-character-set=utf8
+
+	-->connect 유지 시간 변경 
+	wait_timeout            = 1800
+
+
+   2-13 NTP 설치
+        sudo apt-get install ntp
+	설정 
+        sudo vi /etc/ntp.conf
+	
+	#server 0.ubuntu.pool.ntp.org
+	#server 1.ubuntu.pool.ntp.org
+	#server 2.ubuntu.pool.ntp.org
+	#server 3.ubuntu.pool.ntp.org
+
+	#server ntp.ubuntu.com
+
+
+   2-14 libwebsockets 설치
+	sudo apt-get install libwebsockets-dev
+	
+
+   2-15 SNMP v3 설치 
+	
+	sudo apt-get install snmp snmpd
+	
+	설정
+	sudo vi /etc/snmp/snmpd.conf
+	
+	추가
+	createUser root MD5 fmsfms123
+	rouser root auth 1.3.6.1.2.1
+	
+	#  AGENT BEHAVIOUR
+	#
+	#  Listen for connections from the local system only
+	#agentAddress  udp:127.0.0.1:161
+	#  Listen for connections on all interfaces (both IPv4 *and* IPv6)
+	agentAddress udp:161,udp6:[::1]:161
+
+	서비스 재 시작 
+       sudo /etc/init.d/snmpd restart
+
+   
+   2-16   SYSSTAT 설치
+        apt-get install sysstat 
+
+
+   2-99 < 마리아 디비 스케줄 등록 : 1년이상되는 History Data 삭제 >
+
+	/* AI THRESHOLD HISTORY */
+	CREATE EVENT IF NOT EXISTS DEL_AI_TH_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO
+   		DELETE FROM FMSDB.TFMS_AITHRLDHIST_DTL 
+			where CTL_TIME <= date_sub(curdate(), INTERVAL 1 YEAR );
+	
+	
+	/* DI THRESHOLD HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_DI_TH_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_DIDOTHRLDHIST_DTL 
+			where CTL_TIME <= date_sub(curdate(), INTERVAL 1 YEAR );
+		
+		
+	/* AI HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_AI_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_AIHIST_DTL 
+			where TIME <= date_sub(curdate(), INTERVAL 1 YEAR );		
+		
+	/* DI HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_DI_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_DIDOHIST_DTL 
+			where TIME <= date_sub(curdate(), INTERVAL 1 YEAR );
+
+
+	/* FRE HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_FRE_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_FREHIST_DTL 
+			where TIME <= date_sub(curdate(), INTERVAL 1 YEAR );
+		
+		
+	/* FRS HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_FRS_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_FRSHIST_DTL 
+			where TIME <= date_sub(curdate(), INTERVAL 1 YEAR );
+				
+		
+	/* SRE HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_SRE_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_SREHIST_DTL 
+			where TIME <= date_sub(curdate(), INTERVAL 1 YEAR );
+				
+				
+	/* FDE HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_FDE_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_FDEHIST_DTL 
+			where TIME <= date_sub(curdate(), INTERVAL 1 YEAR );				
+				
+		
+	/* CTRL HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_CTRL_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_CTLHIST_DTL 
+			where CTL_TIME <= date_sub(curdate(), INTERVAL 1 YEAR );
+		
+						
+	/* Event HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_EVENT_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_EVENT_DTL 
+			where DETECT_TIME <= date_sub(curdate(), INTERVAL 1 YEAR );					
+
+				
+	/* SYS HISTORY */	
+	CREATE EVENT IF NOT EXISTS DEL_SYS_HIST_DTL
+		ON SCHEDULE
+	   EVERY 1 DAY
+		STARTS CURRENT_TIMESTAMP
+		DO	
+			DELETE FROM FMSDB.TFMS_SYSHIST_DTL 
+			where TIME <= date_sub(curdate(), INTERVAL 1 YEAR );					
+
+
+	/* Event 보기 */
+	SHOW EVENTS ;
+	show events;
+	show variables like 'event%'
+	/* Event 삭제 */
+	/*
+	DROP EVENT IF EXISTS DEL_AI_TH_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_DI_TH_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_CTRL_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_AI_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_DI_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_FRE_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_FRS_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_SRE_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_FDE_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_EVENT_HIST_DTL;
+	DROP EVENT IF EXISTS DEL_SYS_HIST_DTL;
+	*/
+
+
+
+3. 부트로더 (GRUB) 설정 for fixing 'No wake up' problems.
+
+	# chmod 644 /boot/grub/grub.cfg
+	# vi /boot/grub/grub.cfg
+
+	아래 빨간색 부분이 msdos1 로 되어 있는 경우만 BIOS legacy 로 설치 된경우입니다.
+
+--------------------------------
+#This is Solution for no wake up problems. by JACS Company
+export linux_gfx_mode
+menuentry 'Ubuntu' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-simple-0e21acfd-216c-4473-a407-9ecaeadacb8a' {
+        recordfail
+        load_video
+        gfxmode $linux_gfx_mode
+        insmod gzio
+        insmod part_msdos
+        insmod ext2
+        set root='hd0,msdos1'
+        if [ x$feature_platform_search_hint = xy ]; then
+          search --no-floppy --fs-uuid --set=root --hint-bios=hd0,msdos1 --hint-efi=hd0,msdos1 --hint-baremetal=ahci0,msdos1  0e21acfd-216c-4473-a407-9ecaeadacb8a
+        else
+          search --no-floppy --fs-uuid --set=root 0e21acfd-216c-4473-a407-9ecaeadacb8a
+        fi
+#This point is Important. (TOBE 부분을 볼 것)
+        #ASIS : linux   /boot/vmlinuz-4.2.0-27-generic root=UUID=0e21acfd-216c-4473-a407-9ecaeadacb8a ro  quiet splash $vt_handoff
+        #TOBE : Start
+        linux   /boot/vmlinuz-4.2.0-27-generic root=UUID=0e21acfd-216c-4473-a407-9ecaeadacb8a ro acpi_osi=linux nomodeset vga=354
+        #TOBE : END
+        initrd  /boot/initrd.img-4.2.0-27-generic
+}
+
+--------------------------------
+	
+	노란색 부분을 추가로 작성 한 후 재부팅 하시면 됩니다. ( acpi_osi=linux nomodeset vga=모니터에 맞는 숫자 )
+	분홍색 부분은 노란색 작성 이후 부팅시 화면이 하얂게 나오면서 정상적으로 안보이는 경우 아래 링크에서
+	해상도를 확인훈 VGA=숫자로 적어 주시면 됩니다. https://en.wikipedia.org/wiki/VESA_BIOS_Extensions
+	기본적으로 VGA=숫자는 1,024×768/16bit를 의미하는 279, Text 모드만 사용시, 264, 268
+	또는 아래 예제와 같이 1,440×900/ 16bit를 의미하는 354 값을 운용하고자하는 모니터에 맞게 넣어 주시면 됩니다.
+	※ 당사 Test시 우분투 서버/데스크탑 버전과 상관 없이 TTY 모드에서 웨이크업 가능 합니다.
+	추가도 DP포트 이용시는 위와 같은 세팅 없이 웨이크 기능이 정상 작동됩니다.
+
+	* 주의사항 
+	1. OS 업데이트 시, GRUB 설정 초기화 됩니다.

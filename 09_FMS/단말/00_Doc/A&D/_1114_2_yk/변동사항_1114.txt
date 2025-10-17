@@ -1,0 +1,169 @@
+ [FMS 교체 사업] RTU-SVR-OP프로토콜수정(11/14--전원감시 등) v1
+
+2016-11-14 오후 11:00 ykhong
+
+===================================     
+1. 전원제어 현재 상태조회 CMD 필요***
+   : 전원제어(반자동 및 자동) 프로토콜 보완 사항
+   -예1) 현재 전원제어 중이 아님 리턴
+   -예2) 전원제어중-OFF 프로세스 1단계 진행중 리턴
+2. 감시장비 연결상태 조회 CMD 필요***
+3. 펌웨어 버젼 조회 CMD 필요 ***
+4. RTU IP, SITE_ID 조회 CMD 필요 ***
+5. 전원 감시 센서 종류 다시 구성 : 전원감시센서_세부모니터링종류(20161114).xlsx 문서 참조
+   : RTU-DB 의 TFMS_SNSR_MST, TFMS_SNSRMETHOD_MST 테이블 
+   수정이 필요합니다.
+   1차 버전 : 상전압R, 주파수 등의 2가지 항목 감시
+   2차 버전 : 상전류Ir, 상전류 Is, 상전압 vr, 주파수 등의 4가지 항목 감시
+
+6. 기타 : 서버 다운 후 재 연결 시도 시간 간격에 대해서..
+    OS 레벨에서 소켓 alive check 하는 것 말고
+    FMS 프로토콜(eFT_NETALIVECHK_REQ)로 alive check 하는 부분에서 
+    다음 처리 절차로 서버 재 연결을 시도 했으면 합니다. 
+
+    RTU 는 네트웍 Alive 체크를 위하여
+    서버에 일정시간(1분)마다 alive_chk 패킷을 전송 및 수신한다.
+    2회이상 응답이 없을 시 
+    다시 10초에 한번 alive_chk 패킷을 전송후 2회 이상 응답이 없는 경우
+    네트웍 소켓을 CLOSE 하고 재 연결을 시도 
+    (따라서, 랜선을 뽑은 경우..2분20초 만에 소켓 close 되고, 서버 재연결 루틴을
+    타게 됩니다.) 검토 부탁드립니다.
+===================================     
+
+
+// --------------------------------------------------------------s
+// 1. 감시장비 전원제어 현재 진행 상태 요청
+// --------------------------------------------------------------s
+
+// ## eFT_EQPCTL_STATUS_REQ=3530,    // FMS-OP -> FMS_RTU, 감시장비 전원제어 현재 진행 상태를 요청
+
+// [2016/11/14 ykhong] : 전원제어(반자동 및 자동) 프로토콜 보완
+// 전원제어 현재 진행 상태를 요청한다.
+typedef struct _FCLT_CTLSTATUS_EQPOnOff
+{
+	FMS_ElementFclt			tFcltElem;		// 설비까지 구분
+	// ---------------------
+	enumFCLTCtl_TYPE		eCtlType;		// 제어 타입 -- eFCLTCtlTYP_DoCtrl
+	enumFCLTCtl_CMD			eCtlCmd;		// (현재) 모니터링 데이터를 요청한다. (한번 쿼리 용) -- eFCLTCtlCMD_Query=13
+} FCLT_CTLSTATUS_EQPOnOff;
+
+
+// ## eFT_EQPCTL_STATUS_RES,    // FMS_RTU -> FMS-OP, 감시장비 전원제어 현재 진행 상태 응답
+
+// 전원제어 현재 진행 상태를 리턴한다.
+// 예1) 현재 전원제어 중이 아님 리턴
+// 예2) 전원제어중-OFF 프로세스 1단계 진행중 리턴
+typedef struct _FCLT_CTLSTATUS_EQPOnOffRslt
+{
+	FMS_ElementFclt		tFcltElem;		// 설비까지 구분
+	// ---------------------
+	// ON / OFF 프로세스 구분
+	// eFCLTCtlCMD_Off or eFCLTCtlCMD_On
+	enumFCLTCtl_CMD		eCtlCmd;		// 실제 제어 명령 : Off 또는 On 명령, 임계제어
+	// ---------------------
+	enumFCLTOnOffStep   eMaxStep;       // 전원제어 프로세스가 거치는 MAX 단계
+	enumFCLTOnOffStep   eCurStep;		// 현재단계: 1) 감시장비SBC 상주데몬 OFF, 2) 안테나제어PC OS 종료, , 
+	
+	enumFCLTCtlStatus   eCurStatus;		// 단계별 처리 상태 : start, ing, end 중에 한가지 상태
+										
+	enumEQPOnOffRslt	eRsult;			// 예1) eCurStatus 가 start 중인데 eRsult 에 에러 결과를 리턴 할수 있음.
+										// 예2) eCurStatus 가 end 상태인데 eRsult 에 에러를 리턴 할수 있음.. 등등..
+										// 예3) eEQPOnOffRslt_ERR_OverlapCmd : OP 에서 RTU에 중복제어를 시도 하면 RTU는 에러를 리턴
+/* -- 사용법
+	// 제어중이 아닐때 다음을 설정
+	eCtlCmd = eFCLTCtlCMD_None;
+	eMaxStep = eEQPCTL_STEP_None;
+	eCurStep = eEQPCTL_STEP_None;
+	eCurStatus = eFCLTCtlSt_None;
+	eRsult = eEQPOnOffRslt_UNKNOWN;
+/**/
+	
+} FCLT_CTLSTATUS_EQPOnOffRslt;
+
+
+
+// --------------------------------------------------------------s
+// 2. 감시장비 네트웍 연결상태 요청
+// --------------------------------------------------------------s
+
+// ## eFT_EQPCTL_CNNSTATUS_REQ,    // FMS-OP -> FMS_RTU, 감시장비 전원제어 : 네트웍 연결상태 요청
+
+typedef struct _FCLT_CNNSTATUS_EQP
+{
+	FMS_ElementFclt			tFcltElem;		// 설비까지 구분
+	// ---------------------
+} FCLT_CNNSTATUS_EQP;
+
+// ## eFT_EQPCTL_CNNSTATUS_RES,    // FMS_RTU -> FMS-OP, 감시장비 전원제어 : 네트웍 연결상태 결과
+
+// 감시장비 네트웍 연결 상태 반환
+typedef struct _FCLT_CNNSTATUS_EQPRslt
+{
+	FMS_ElementFclt			tFcltElem;		// 설비까지 구분
+	// ---------------------
+	enumSnsrCnnStatus		eCnnStatus;		// 정상, (네트웍 연결 안됨 or 센서인식불가), 응답없음.
+} FCLT_CNNSTATUS_EQPRslt;
+
+
+
+// --------------------------------------------------------------s
+// 3. 펌웨어 버젼 조회
+// --------------------------------------------------------------s
+
+//{
+// [2016/11/14 ykhong] : 추가
+// ### eFT_FIRMWARE_VERSION_REQ=9110,	// FMS_FOP -> FMS_RTU : RTU 펌웨어 버젼 정보 요청
+
+typedef struct _FCLT_FIRMWARE_VERSION
+{
+	int		nSiteID;	// 원격국 ID
+} FCLT_FIRMWARE_VERSION;
+
+// ### eFT_FIRMWARE_VERSION_RES,		// FMS_RTU -> FMS_FOP
+
+typedef struct _FCLT_FIRMWARE_VERSIONRslt
+{
+	int		nSiteID;			// 원격국 ID
+	char    szVersion[20];		// 펌웨어 버젼 정보
+} FCLT_FIRMWARE_VERSIONRslt;
+//}
+
+
+// --------------------------------------------------------------s
+// 4. RTU IP, SITE_ID 조회
+// --------------------------------------------------------------s
+
+// ### eFT_RTUSETTING_INFO_REQ=9200,	// FMS_FOP -> FMS_RTU : RTU에 하드코딩된 IP, SITE 정보를 요청한다.
+
+typedef struct _FCLT_RTUSETTING_INFO
+{
+	int		nSiteID;		// 원격국 ID (FOP가 갈고있는 SITE_ID)
+} FCLT_RTUSETTING_INFO_REQ;
+
+// ### eFT_RTUSETTING_INFO_RES,		// FMS_RTU -> FMS_FOP
+
+typedef struct _FCLT_RTUSETTING_INFORslt
+{
+	int		nSiteID;		// 원격국 ID(FOP에서 지정한 SITE_ID)
+	char    szIP[20];
+	char    szSubnetmask[20];
+	char    szGateway[20];
+	int		nSiteID_Rslt;	// 원격국 ID (RTU에 하드코딩된 SITE_ID 정보)
+
+} FCLT_RTUSETTING_INFORslt;
+
+
+// --------------------------------------------------------------s
+5. 전원 감시 센서 종류 다시 구성 : 전원감시센서_세부모니터링종류(20161114).xlsx 문서 참조
+// --------------------------------------------------------------s
+
+전원감시항목	idx(1~30)
+상전압 vr	    1
+상전류Ir 	    7
+상전류 Is	    8
+주파수	        13
+
+"전원감시 장치에서 모니터링 항목(30개) 중 
+실제 FMS 에서 사용할 결과 항목은
+TFMS_SNSRMETHOD_MST  테이블의 S01_POS 컬럼을 전원감시 
+항목 idx 로 참조하여 사용한다."	

@@ -1,0 +1,100 @@
+2016-11-08 오후 9:55
+
+--------------RTU 기존 대비 필요한 명령 분석
+1. 오류확인사항 : 서버 종료 후 재 기동 했는데, RTU 가 재 접속을 하지 않음
+2. 오류확인사항 : 전원제어 프로토콜 운영 시 FOP 가 똑같은 태그를 두번 받는 경우 확인
+3. 오류확인사항 : 실시간 제어 요청시 바로 결과를 반환 하지 않고 20초정도 후부터 그 결과를 송신하는 문제
+4. 전원제어(반자동 및 자동) 프로토콜 보완
+   1) 전원제어 현재 상태조회 CMD 필요
+     - 현재 전원제어 중이 아님 리턴
+     - 전원제어중-OFF 프로세스 1단계 진행중 리턴
+   *2) 장비에서 전원제어 ON/OFF 처리중 에러 정의 필요
+   3) 전원제어 프로세스 강제 종료 CMD 필요
+   4) 감시장비 연결상태 조회 CMD 필요
+5. 펌웨어 버젼 조회 CMD 필요
+6. RTU IP, SITE_ID 조회 CMD 필요
+
+
+
+------------------------------------------------
+// [2016/11/8 ykhong] : 추가
+eFT_EQPCTL_POWEROPT_OFF=3526,	// 감시장비 전원제어 시 세부 제어 옵션 : 센서간 딜레이, 감시장비 응답 대기 시간 지정 등
+eFT_EQPCTL_POWEROPT_ON,			// 응답 확인 하지 않음
+
+
+------------------------------------------------
+장비 전원 제어 프로세스 옵션 구조체
+FCLT_CTRL_EQPOnOff_OptionOFF, 
+FCLT_CTRL_EQPOnOff_OptionON  추가
+
+
+------------------------------------------------
+// 감시장비 반자동/자동 전원제어 시 세부 제어 옵션 : 센서간 딜레이, 감시장비 응답 대기 시간 지정 등
+// [2016/11/8 ykhong] : 추가
+// ## eFT_EQPCTL_POWEROPT_OFF
+// ## eFT_EQPCTL_POWEROPT_ON
+
+// 장비 전원 제어 프로세스 옵션 구조체
+typedef struct _FCLT_CTRL_EQPOnOff_OptionOFF
+{
+	// eFCLTCtlCMD_Off or eFCLTCtlCMD_On
+	enumFCLTCtl_CMD			eCtlCmd;		// 실제 제어 명령 : Off 또는 On 명령, 임계제어
+	
+	// 전원 스위치별 제어 딜레이 시간 지정
+    int iDelay_PowerSwitch_ms[5]; // 0번째 iDelay 는 첫번째 스위치제어하고 기다리는 시간임.
+								  // 준 고정형은 0 번만 사용
+    
+    // 감시장비 OFF 명령(eFT_EQPCTL_POWER) EQP 로 송신 후
+    // 처리STEP1 완료 상태(eFT_EQPCTL_RES) 수신 시 까지 대기 시간 지정
+    int iWaitTime_STEP1_ms; // 디풀트 15초
+    
+    // 감시장비 OS 종료 대기시간 지정 : 10초(디폴트)
+    // (RTU는 핑 테스트를 통해 감시장비SBC 종료 확인)
+    int iWaitTime_EqpOSEnd_ms; // 10초(디폴트)
+	
+} FCLT_CTRL_EQPOnOff_OptionOFF;
+
+// 시간 단위 밀리초
+typedef struct _FCLT_CTRL_EQPOnOff_OptionON
+{
+	// eFCLTCtlCMD_Off or eFCLTCtlCMD_On
+	enumFCLTCtl_CMD			eCtlCmd;		// 실제 제어 명령 : Off 또는 On 명령, 임계제어
+	
+	// 전원 스위치별 제어 딜레이 시간 지정
+    int iDelay_PowerSwitch_ms[5]; // 0번째 iDelay 는 첫번째 스위치제어하고 기다리는 시간임.
+    
+    //  - 감시장비 OS 부팅확인(핑테스트) 대기시간 지정 : 20초
+    // : 부팅 확인 대기시간동안 필히 대기하고 다음(FMSEqpDeamon.exe 에 네트웍 접속 시도) 진행
+    int iWaitTime_EqpOSStart_ms; // 20초(디폴트)
+
+    // FMSEqpDeamon.exe 에 네트웍 접속 시도 대기 시간 지정
+    // 이 시간 동안 ReTryConnect 를 시도한다, 연결되면 다음을 진행
+    int iWaitTime_EQPDmnCnn_ms; // 디풀트 10초
+    
+    // 감시장비 ON 명령(eFT_EQPCTL_POWER) EQP 로 송신 후
+    // 처리STEP1 완료 상태(eFT_EQPCTL_RES) 수신 시 까지 대기 시간 지정
+    int iWaitTime_STEP1_ms; // 디풀트 15초
+
+    // 처리STEP1 완료 상태 확인 후
+    // 처리STEP2 완료 상태(eFT_EQPCTL_RES) 수신 시 까지 대기 시간 지정
+    int iWaitTime_STEP2_ms; // 디풀트 15초
+	
+} FCLT_CTRL_EQPOnOff_OptionON;
+
+
+
+<======================= 에러 항목 추가
+
+// [2016/10/23 ykhong] : 
+typedef enum _enumEQPOnOffRslt // 설비 제어단계에 대한 결과
+{
+	eEQPOnOffRslt_OK = 1,
+	eEQPOnOffRslt_ERR_OverlapCmd, // 중복제어 에러임
+	eEQPOnOffRslt_UNKNOWN,
+	// ------------------
+	// [2016/11/8 ykhong] : 추가
+	eEQPOnOffRslt_EQPDisconnected,  // 감시 장비 연결 상태 아님
+	eEQPOnOffRslt_EQPError,			// 감시 장비 에러 리턴
+	eEQPOnOffRslt_ProcTimeoutOver,  // 전원제어 반자동/자동 프로세스 타임아웃
+	// ------------------
+} enumEQPOnOffRslt;

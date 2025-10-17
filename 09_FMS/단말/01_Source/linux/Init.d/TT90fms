@@ -1,0 +1,12 @@
+#!/bin/bash
+
+SERVICE='fms_observer'
+ 
+if ps ax | grep -v grep | grep $SERVICE > /dev/null
+then
+    echo "$SERVICE service running, everything is fine"
+else
+    echo "$SERVICE is not running"
+	cd /home/fms/appm
+	/home/fms/appm/$SERVICE &
+fi

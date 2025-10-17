@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML-Powered Pose Trainer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 40px);
+        }
+        .main-content {
+            flex: 2;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow-y: auto;
+        }
+        .sidebar {
+            flex: 1;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow-y: auto;
+            max-height: 100%;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        h2, h3 {
+            color: #444;
+            margin-bottom: 15px;
+        }
+        #video-container {
+            position: relative;
+            text-align: center;
+            margin-bottom: 30px;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        #video-container img {
+            width: 100%;
+            max-width: 640px;
+            display: block;
+        }
+        #current-pose-container {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 18px;
+            backdrop-filter: blur(10px);
+        }
+        .section {
+            margin-bottom: 25px;
+            padding: 20px;
+            border: 2px solid #e8ecf4;
+            border-radius: 12px;
+            background: #fafbfc;
+            transition: all 0.3s ease;
+        }
+        .section:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.1);
+        }
+        .button {
+            padding: 12px 24px;
+            margin: 8px 4px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-success { background: linear-gradient(45deg, #28a745, #20c997); color: white; }
+        .btn-danger { background: linear-gradient(45deg, #dc3545, #fd7e14); color: white; }
+        .btn-primary { background: linear-gradient(45deg, #007bff, #6f42c1); color: white; }
+        .btn-warning { background: linear-gradient(45deg, #ffc107, #fd7e14); color: #212529; }
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+        }
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin: 15px 0;
+        }
+        .input-group input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e8ecf4;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .status-message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+            border: 2px solid;
+        }
+        .status-success { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+        .status-error { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+        .status-info { background: #d1ecf1; color: #0c5460; border-color: #bee5eb; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin: 25px 0;
+        }
+        .stat-card {
+            text-align: center;
+            padding: 20px 15px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border: 2px solid #dee2e6;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pose-list {
+            list-style: none;
+            padding: 0;
+        }
+        .pose-list li {
+            padding: 15px;
+            margin: 8px 0;
+            background: linear-gradient(135deg, #ffffff, #f8f9fa);
+            border: 2px solid #e8ecf4;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+        .pose-list li:hover {
+            border-color: #667eea;
+            transform: translateX(5px);
+        }
+        .pose-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+        }
+        .pose-count {
+            background: linear-gradient(45deg, #007bff, #6f42c1);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .training-indicator {
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+            border: 2px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            animation: pulse 2s infinite;
+            text-align: center;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        .instructions {
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            border: 2px solid #2196f3;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .instructions h3 {
+            color: #1565c0;
+            margin-bottom: 15px;
+        }
+        .instructions ol {
+            color: #0d47a1;
+            line-height: 1.8;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-content">
+            <h1>ML-Powered Pose Trainer</h1>
+            <div id="video-container">
+                <img src="{{ url_for('video_feed') }}" alt="Video Stream">
+                <div id="current-pose-container">LOADING...</div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-samples">0</div>
+                    <div class="stat-label">Total Samples</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="unique-poses">0</div>
+                    <div class="stat-label">Unique Poses</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="model-status">❌</div>
+                    <div class="stat-label">Model Ready</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="feedback-count">0</div>
+                    <div class="stat-label">New Feedback</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sidebar">
+            <div id="training-status" class="training-indicator" style="display: none;">
+                <strong>🔄 Training in Progress</strong>
+                <div id="training-message">Starting training...</div>
+            </div>
+            
+            <div class="section">
+                <h3>🎯 Define New Pose</h3>
+                <p>Position yourself and define a new pose instantly!</p>
+                <div class="input-group">
+                    <input type="text" id="new-pose-name" placeholder="Enter pose name (e.g., warrior, plank)">
+                    <button class="button btn-warning" id="define-pose-btn">Define Pose</button>
+                </div>
+                <div id="define-status" class="status-message" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h3>📝 Pose Feedback</h3>
+                <div id="current-prediction" style="font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #333;">
+                    Waiting for pose...
+                </div>
+                <p>Is this prediction correct?</p>
+                <div style="text-align: center; margin: 20px 0;">
+                    <button class="button btn-success" id="correct-btn">👍 Correct</button>
+                    <button class="button btn-danger" id="incorrect-btn">👎 Incorrect</button>
+                </div>
+                
+                <div id="correction-form" style="display: none;">
+                    <div class="input-group">
+                        <input type="text" id="correct-label-input" placeholder="Enter correct pose name">
+                        <button class="button btn-primary" id="submit-correction-btn">Submit</button>
+                    </div>
+                </div>
+                <div id="feedback-status" class="status-message" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h3>🚀 Training Control</h3>
+                <button class="button btn-primary" id="manual-train-btn">Train Model Now</button>
+                <div id="train-status" class="status-message" style="display: none;"></div>
+                <p style="font-size: 12px; color: #666; margin-top: 15px;">
+                    Auto-training happens after 5 feedback samples
+                </p>
+            </div>
+            
+            <div class="section">
+                <h3>📚 Learned Poses</h3>
+                <ul id="learned-poses-list" class="pose-list">
+                    <li><span class="pose-name">No poses learned yet</span></li>
+                </ul>
+            </div>
+            
+            <div class="instructions">
+                <h3>ℹ️ How to Use</h3>
+                <ol>
+                    <li><strong>Define poses:</strong> Enter a pose name and click "Define Pose"</li>
+                    <li><strong>Give feedback:</strong> Use 👍/👎 buttons to correct predictions</li>
+                    <li><strong>Auto-training:</strong> Model improves automatically with feedback</li>
+                    <li><strong>Experiment:</strong> Try different poses and see how well it learns!</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Element references
+            const elements = {
+                currentPose: document.getElementById('current-pose-container'),
+                currentPrediction: document.getElementById('current-prediction'),
+                learnedPosesList: document.getElementById('learned-poses-list'),
+                trainingStatus: document.getElementById('training-status'),
+                trainingMessage: document.getElementById('training-message'),
+                correctBtn: document.getElementById('correct-btn'),
+                incorrectBtn: document.getElementById('incorrect-btn'),
+                correctionForm: document.getElementById('correction-form'),
+                correctionInput: document.getElementById('correct-label-input'),
+                submitCorrectionBtn: document.getElementById('submit-correction-btn'),
+                feedbackStatus: document.getElementById('feedback-status'),
+                newPoseNameInput: document.getElementById('new-pose-name'),
+                definePoseBtn: document.getElementById('define-pose-btn'),
+                defineStatus: document.getElementById('define-status'),
+                manualTrainBtn: document.getElementById('manual-train-btn'),
+                trainStatus: document.getElementById('train-status'),
+                totalSamples: document.getElementById('total-samples'),
+                uniquePoses: document.getElementById('unique-poses'),
+                modelStatus: document.getElementById('model-status'),
+                feedbackCount: document.getElementById('feedback-count')
+            };
+
+            let lastPoseName = "";
+
+            // Update pose and training status
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/api/current_pose');
+                    const data = await response.json();
+                    
+                    lastPoseName = data.name;
+                    const probability = Math.round(data.probability * 100);
+                    
+                    let displayText = `${data.name} (${probability}%)`;
+                    if (data.is_training) {
+                        displayText = `🔄 TRAINING...`;
+                    }
+                    
+                    elements.currentPose.textContent = displayText;
+                    elements.currentPrediction.innerHTML = `<strong>"${data.name}"</strong> (${probability}% confidence)`;
+                    
+                    if (data.is_training) {
+                        elements.trainingStatus.style.display = 'block';
+                        elements.trainingMessage.textContent = data.training_status || 'Processing...';
+                        elements.manualTrainBtn.disabled = true;
+                    } else {
+                        elements.trainingStatus.style.display = 'none';
+                        elements.manualTrainBtn.disabled = false;
+                    }
+                    
+                    elements.feedbackCount.textContent = data.feedback_count || 0;
+                } catch (error) {
+                    console.error('Error fetching pose data:', error);
+                }
+            }, 1000);
+            
+            // Update stats and poses
+            setInterval(async () => {
+                try {
+                    const [labelsResponse, statsResponse] = await Promise.all([
+                        fetch('/api/learned_labels'),
+                        fetch('/api/stats')
+                    ]);
+                    
+                    const labelsData = await labelsResponse.json();
+                    const statsData = await statsResponse.json();
+                    
+                    elements.totalSamples.textContent = statsData.total_samples || 0;
+                    elements.uniquePoses.textContent = statsData.unique_poses || 0;
+                    elements.modelStatus.textContent = statsData.model_loaded ? '✅' : '❌';
+                    
+                    updateLearnedPosesList(labelsData.labels, labelsData.counts);
+                } catch (error) {
+                    console.error('Error fetching stats:', error);
+                }
+            }, 3000);
+            
+            function updateLearnedPosesList(labels, counts) {
+                if (!labels || labels.length === 0) {
+                    elements.learnedPosesList.innerHTML = '<li><span class="pose-name">No poses learned yet</span></li>';
+                    return;
+                }
+                
+                elements.learnedPosesList.innerHTML = '';
+                labels.forEach(label => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <span class="pose-name">${label}</span>
+                        <span class="pose-count">${counts[label] || 0}</span>
+                    `;
+                    elements.learnedPosesList.appendChild(li);
+                });
+            }
+            
+            // Event Listeners
+            elements.correctBtn.addEventListener('click', () => {
+                if (lastPoseName && !['NO_PERSON', 'NEEDS_TRAINING', 'LOADING...'].includes(lastPoseName)) {
+                    sendFeedback(lastPoseName);
+                }
+            });
+
+            elements.incorrectBtn.addEventListener('click', () => {
+                elements.correctionForm.style.display = 'block';
+                elements.correctionInput.focus();
+            });
+
+            elements.submitCorrectionBtn.addEventListener('click', () => {
+                const correctLabel = elements.correctionInput.value.trim();
+                if (correctLabel) {
+                    sendFeedback(correctLabel);
+                    elements.correctionInput.value = '';
+                    elements.correctionForm.style.display = 'none';
+                }
+            });
+            
+            elements.definePoseBtn.addEventListener('click', async () => {
+                const poseName = elements.newPoseNameInput.value.trim();
+                if (!poseName) {
+                    showStatus(elements.defineStatus, 'Please enter a pose name', 'error');
+                    return;
+                }
+                
+                try {
+                    elements.definePoseBtn.disabled = true;
+                    showStatus(elements.defineStatus, 'Defining pose...', 'info');
+                    
+                    const response = await fetch('/api/define_pose', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pose_name: poseName })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showStatus(elements.defineStatus, data.message, 'success');
+                        elements.newPoseNameInput.value = '';
+                    } else {
+                        showStatus(elements.defineStatus, data.error, 'error');
+                    }
+                } catch (error) {
+                    showStatus(elements.defineStatus, 'Failed to define pose', 'error');
+                } finally {
+                    elements.definePoseBtn.disabled = false;
+                }
+            });
+            
+            elements.manualTrainBtn.addEventListener('click', async () => {
+                try {
+                    elements.manualTrainBtn.disabled = true;
+                    showStatus(elements.trainStatus, 'Starting training...', 'info');
+                    
+                    const response = await fetch('/api/manual_train', {
+                        method: 'POST'
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showStatus(elements.trainStatus, data.message, 'success');
+                    } else {
+                        showStatus(elements.trainStatus, data.error, 'error');
+                        elements.manualTrainBtn.disabled = false;
+                    }
+                } catch (error) {
+                    showStatus(elements.trainStatus, 'Failed to start training', 'error');
+                    elements.manualTrainBtn.disabled = false;
+                }
+            });
+            
+            // Enter key handlers
+            elements.newPoseNameInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    elements.definePoseBtn.click();
+                }
+            });
+            
+            elements.correctionInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    elements.submitCorrectionBtn.click();
+                }
+            });
+
+            async function sendFeedback(label) {
+                try {
+                    showStatus(elements.feedbackStatus, `Sending feedback for '${label}'...`, 'info');
+                    
+                    const response = await fetch('/api/feedback', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ true_label: label })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showStatus(elements.feedbackStatus, data.message, 'success');
+                    } else {
+                        showStatus(elements.feedbackStatus, data.error, 'error');
+                    }
+                } catch (error) {
+                    showStatus(elements.feedbackStatus, 'Failed to send feedback', 'error');
+                }
+            }
+
+            function showStatus(element, message, type) {
+                element.textContent = message;
+                element.className = `status-message status-${type}`;
+                element.style.display = 'block';
+                
+                if (type === 'success' || type === 'info') {
+                    setTimeout(() => {
+                        element.style.display = 'none';
+                    }, 5000);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

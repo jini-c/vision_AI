@@ -1,0 +1,54 @@
+< DI 장애 >
+
+typedef enum _enumFCLT_GRADE // FMS 장애등급 ENUM
+{
+    eFCLTGRADE_None = -1,
+    eFCLTGRADE_Danger,       // 위험(Danger)
+    eFCLTGRADE_Warning,      // 경고(Warning)
+    eFCLTGRADE_Caution,		 // 주위(Caution)
+    eFCLTGRADE_Normal,       // 정상(Normal)
+    // ------------------
+    eFCLTGRADE_MaxCount,
+	eFCLTGRADE_UnKnown = 99, // 장애등급을 결정할수 없는경우.
+} enumFCLT_GRADE;
+
+
+// 설비 까지 구분
+typedef struct _FMS_ElementFclt
+{
+	int					nSiteID;	// 원격국 ID
+	int					nRtuID;		// RTU ID
+	enumFCLT_TYPE		eFclt;		// 설비구분(대분류 또는 시스템 구분)
+} FMS_ElementFclt;
+
+
+typedef struct _FMS_TransDBData
+{
+	long			timeT;		// time_t  now; // "%Y%m%d%H%M%S"
+	char			sDBFCLT_TID[MAX_DBFCLT_TID];// 서버에 전송 후 _ACK 수신 시 레코드 ID
+} FMS_TransDBData;
+
+
+typedef struct _FMS_FaultDataDI // DI 스타일의 장애정보 데이터
+{
+	enumFCLT_SUB	eFcltSub;	// 세부설비구분
+	int				idxSub;		// 같은 센서가 3개가 설치되어 있다면 index로 구분(0,1,,)
+
+	// 판정기준 : DI : Boolen, DI : 범위기준, ALL : 연결 안됨
+	enumFCLT_GRADE	eGrade;     // 장비 장애판단 등급
+	enumFCLT_ERR	eErrCode;	// 네트웍 연결 안됨, 센서인식불가, 등급판정 할 수 없음 등
+
+	// 장애 발생 시의 모니터링 결과
+	int				bRslt;		// 모니터링 결과
+} FMS_FaultDataDI;
+
+typedef struct _FCLT_EVT_FaultDI // 장애 발생 정보
+{
+	FMS_ElementFclt     tFcltElem;		// 설비까지 구분
+	FMS_TransDBData     tDbTans;		// RTU-SVR 간 DB 트랜젝션 확인을 위한 정보
+
+	// 장애 당시의 모니터링 결과
+	int					nFcltSubCount;	// [2016/8/10 ykhong] : 그룹으로 전송할 모니터링 결과 갯수! (eFcltSub count)
+	FMS_FaultDataDI		rslt[1];		// 최대 MAX_GRP_RSLT_DI 가능 (nFcltSubCount 참조)
+
+} FCLT_EVT_FaultDI;

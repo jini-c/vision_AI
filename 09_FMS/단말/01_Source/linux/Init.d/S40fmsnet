@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# Start the network....
+#
+
+
+ulimit -c unlimited
+
+#echo "Starting RU Initialize"
+
+if [ -f /home/fms/confm/net.dat ]
+then
+. /home/fms/confm/net.dat
+echo "Used Storage : /home/fms/confm/"
+else
+if [ -f /home/fms/confs/net.dat ]
+then
+. /home/fms/confs/net.dat
+echo "Used Storage : /home/fms/confs/"
+else
+echo "All applicaiton storage is fail."
+fi
+#
+fi
+
+wan=$ifname
+#=================================
+case "$1" in
+	start)
+ 	ifconfig $wan $ip netmask $netmask
+	route add default gw $gateway
+	;;
+    	stop)
+	echo "Stop Network"
+	echo "ifconfig $wan down"
+	ifconfig $wan down
+	;;
+	*)
+	;;
+esac

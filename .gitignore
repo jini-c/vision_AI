@@ -1,0 +1,54 @@
+# IDE 설정
+.idea/
+
+# OS 특정 파일
+Thumbs.db
+.DS_Store
+
+# 데이터셋 및 모델 파일
+00_Dataset/
+00_Models/
+*.pt
+*.hdf5
+*.pth
+*.keras
+*.dat
+*.pb
+*.bin
+*.xml
+*.joblib
+*.pkl
+*.xgb
+*.dat
+
+# 파이썬 캐시
+__pycache__/
+*.pyc
+
+# 빌드 결과물
+*.o
+*.exe
+*.dll
+*.so
+*.lib
+*.ncb
+*.opt
+*.dsw
+*.dsp
+
+# 로그 파일
+*.log
+
+# 출력 디렉토리
+00_Sample_video/output/
+
+# 데이터 파일
+feedback_data.csv
+06_PoseEstimation/pose_img/person/dataset.csv
+06_PoseEstimation/pose_img/person/keypoints.csv
+
+# 압축 파일
+*.zip
+
+# VSCode 워크스페이스
+*.code-workspace

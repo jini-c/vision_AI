@@ -1,0 +1,15 @@
+#! /bin/sh
+
+# Start the observer....
+#
+app_path=/home/fms/appm/fms_observer
+
+echo "Starting observer from"
+
+if [ -f "$app_path" ];then
+    $app_path &
+else
+    echo "Not found : $app_path."
+fi
+
+exit 0
